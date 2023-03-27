@@ -8,6 +8,8 @@ flask = "*"
 flask-sqlalchemy = "*"
 jinja2 = "*"
 python-dotenv = "*"
+tweepy = "*"
+spacy = "*"
 
 [dev-packages]
 
