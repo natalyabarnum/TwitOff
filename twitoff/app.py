@@ -1,5 +1,7 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 from .models import DB, User, Tweet
+from .twitter import add_or_update_user
+from .predict import predict_user
 
 def create_app():
 
@@ -19,53 +21,63 @@ def create_app():
         return render_template('base.html', title='Home Page', users=users)
 
 
-    @app.route('/beef')
-    def beef():
-        return render_template('base.html', title='Beef Page')
-
-
     @app.route('/reset')
     def reset():
         # Drop all DB tables
         DB.drop_all()
         # Recreate all db tables according to schema in models.py
         DB.create_all()
-        return "database has been reset"
+  
+        return render_template('base.html', title='Reset Database')
 
-    @app.route('/populate')
-    def populate():
-        # Creates two fake users in DB
-        talya = User(id=1, username='Talya')
-        DB.session.add(talya)
-        brian = User(id=2, username='Brian')
-        DB.session.add(brian)
-        jordan = User(id=3, username='Jordan')
-        DB.session.add(jordan)
-        alina = User(id=4, username='Alina')
-        DB.session.add(alina)
-        anjanette = User(id=5, username='Anjanette')
-        DB.session.add(anjanette)
-        evan = User(id=6, username='Evan')
-        DB.session.add(evan)
-        
-        # Create two fake tweets in DB
-        tweet1 = Tweet(id=1, text="talya tweeted this", user=talya)
-        DB.session.add(tweet1)
-        tweet2 = Tweet(id=2, text="brian tweeted this", user=brian)
-        DB.session.add(tweet2)
-        tweet3 = Tweet(id=3, text="jordan tweeted this", user=jordan)
-        DB.session.add(tweet3)
-        tweet4 = Tweet(id=4, text="hi", user=alina)
-        DB.session.add(tweet4)
-        tweet5 = Tweet(id=5, text="o.o", user=anjanette)
-        DB.session.add(tweet5)
-        tweet6 = Tweet(id=6, text="loser", user=evan)
-        DB.session.add(tweet6)
+    @app.route('/update')
+    def update():
+        # Get list of all users
+        users = User.query.all()
+        usernames = [user.username for user in users]
 
-        # Save changes just made to DB
-        # "commit" changes
-        DB.session.commit()
-        return "DB has been populated"
+        for username in usernames:
+            add_or_update_user(username)
+            
+        return render_template('base.html', title='Users updated')
+    
+    @app.route('/user', methods =['POST'])
+    @app.route('/user/<username>', methods =['GET'])
+    def user(username=None, message=''):
+        # Assigning username
+        username = username or request.values['user_name']
         
+        try:
+            # Displaying message after user has been added
+            if request.method == 'POST':
+                add_or_update_user(username)
+                message = f'User {username} has been successfully added!'
+            
+            # Get tweets
+            tweets = User.query.filter(User.username==username).one().tweets
+
+        except Exception as e:
+            message = f'Error adding {username}: {e}'
+            tweets = []
+        
+        return render_template('user.html', title=username, tweets=tweets, message=message)
+        
+    @app.route('/compare', methods=['POST'])
+    def compare():
+        user0, user1 = sorted([request.values['user0'], request.values['user1']])
+        hypo_tweet = request.values['tweet_text']
+        
+        if user0 == user1:
+            message = 'Cannot compare user to themselves'
+        else:
+            pred = predict_user(user0, user1, hypo_tweet)
+            
+            # Get into if statement if pred is user1
+            if pred:
+                message = f'"{hypo_tweet}" is more likely to be said by {user1} than {user0}'
+            else:
+                message = f'"{hypo_tweet}" is more likely to be said by {user0} than {user1}'
+        
+        return render_template('prediction.html', title='Prediction', message=message)
         
     return app
